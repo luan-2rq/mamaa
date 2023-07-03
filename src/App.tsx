@@ -1,16 +1,16 @@
 import './App.css'
 
 import { Outlet } from 'react-router-dom'
+import Home from './components/pages/Home.tsx'
 import NavBar from './components/organisms/NavBar';
-import Chart from './components/Chart';
 
 function App() {
 
   return (
     <div className="App">
-      <NavBar />
-      <Chart />
-      <Outlet />
+        <NavBar />
+        <Home />
+        <Outlet />
     </div>
   );
 }
