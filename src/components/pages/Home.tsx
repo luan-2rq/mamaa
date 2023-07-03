@@ -10,45 +10,57 @@ import { DownOutlined, SlidersOutlined, DollarOutlined } from "@ant-design/icons
 import { Table, Tag, Card, Col, Row, Dropdown, Button, Layout, Menu } from "antd";
 
 import axios from 'axios';
+import Chart from "../Chart";
+
+import numeral from 'numeral';
+
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 // Initilze that our content is equal to the layout
 const { Content } = Layout;
 // Initilze our columns
 const columns = [
   {
-    title: "Transaction Date",
-    dataIndex: "transactionDate",
-    key: "transactionDate",
+    title: "Nome do Asset",
+    dataIndex: "assetName",
+    key: "assetType",
   },
   {
-    title: 'Asset Type',
-    dataIndex: 'assetType',
-    key: 'assetType',
-  },
-  {
-    title: "Amount",
-    dataIndex: "amount",
+    title: "Preço Atual",
+    dataIndex: "currentPrice",
     key: "amount",
   },
   {
-    title: "Transaction Type",
-    key: "transactionType",
-    dataIndex: "transactionType",
-    render: (type: string) => (
-      <Tag
-        // if type has sale in it then color it red
-        color={type.includes("Sale") ? "volcano" : "green"}
-        key={type.includes("Full") ? "Sale" : type.includes("Partial") ? "Partial Sale" : "Purchase"}
-      >
-        {type.includes("Full") ? "Sale" : type.includes("Partial") ? "Partial Sale" : "Purchase"}
-      </Tag>
-    ),
+    title: 'Preço de Abertura',
+    dataIndex: 'openPrice',
+    key: 'amount',
   },
   {
-    title: "Source",
-    dataIndex: "ptrLink",
-    key: "ptrLink",
-    render: (link: string) => <a href={link}>Source</a>,
+    title: "Preço de Fechamento",
+    dataIndex: "closePrice",
+    key: "amount",
+  },
+  {
+    title: "Market Value",
+    dataIndex: "marketCap",
+    key: "amount",
+    render: (marketCap: any) => (
+      <Tag color="green" key={marketCap}
+      >
+        {numeral(marketCap).format('0.[00]a').toUpperCase()}
+      </Tag>
+    )
+  },
+  {
+    title: "Volume",
+    dataIndex: "volume",
+    key: "amount",
+    render: (volume: any) => (
+      <Tag color="blue" key={volume}
+      >
+        {numeral(volume).format('0.[00]a').toUpperCase()}
+      </Tag>
+    )
   },
 ];
 
@@ -82,6 +94,7 @@ class Home extends Component<{}> {
       purchases: "0",
       sales: "0",
     },
+    graphData: [],
     summary: "90",
     transactionType: "",
   };
@@ -136,35 +149,37 @@ class Home extends Component<{}> {
 
   fetch = (params: any = {}) => {
     this.setState({ tableLoading: true, statsLoading: true });
-    axios.get("https://insiderunlocked.herokuapp.com/government/congress-trades/?format=json", {
-    params: getURLParams(params)
-  })
+    axios.get("http://127.0.0.1:7071/api/get_current_stocks_data", {params: getURLParams(params)
+})
   .then(response => {
     const data = response.data;
+    console.log(data);
     this.setState({
       tableLoading: false,
       data: data.results,
       pagination: {
         ...params.pagination,
-        total: data.count - params.pagination.pageSize,
+        total: 10 - params.pagination.pageSize,
       },
     });
   })
   .catch(error => {
     console.error('Error:', error);
   }).then(() => {
-      axios.get(`https://insiderunlocked.herokuapp.com/government/summary-stats/${this.state.summary}/?format=json`)
+      axios.get("http://127.0.0.1:7071/api/get_current_stocks_data")
       .then(response => {
         const data = response.data;
         this.setState({
           statsLoading: false,
           stats: {
-            volume: data.results[0].totalVolume.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","),
-            total: data.results[0].total,
+            volume: data.totalVolume,
+            total: data.totalMarketCap,
             purchases: data.results[0].purchases,
             sales: data.results[0].sales,
           },
+          graphData: JSON.parse(data.graphData),
         });
+        console.log(data.graphData)
       })
       .catch(error => {
         console.error('Error:', error);
@@ -173,57 +188,108 @@ class Home extends Component<{}> {
   };
 
   render() {
-    const { data, pagination, tableLoading, statsLoading, stats, summary } = this.state;
+    const { data, pagination, tableLoading, statsLoading, stats, graphData, summary } = this.state;
+    const CustomYAxisTick = (props: any) => {
+      const { x, y, payload } = props;
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text
+            x={0}
+            y={0}
+            dy={16}
+            textAnchor="end"
+            fill="#666"
+            transform="rotate(-35)"
+          >
+            {payload.value.toFixed(2)}
+          </text>
+        </g>
+      );
+    };
+    console.log(graphData);
     return (
       <Layout style={{ marginRight: 0, minHeight: 1000 }}>
         <Content>
-          <Row className="headerSummaryDiv">
-            <Dropdown className="Dropdown" overlay={
-              <Menu onClick={this.handleSummaryMenuClick}>
-                <Menu.Item key="30" icon={<SlidersOutlined />}>
-                  Last 30 Days
-                </Menu.Item>
-                <Menu.Item key="60" icon={<SlidersOutlined />}>
-                  Last 60 Days
-                </Menu.Item>
-                <Menu.Item key="90" icon={<SlidersOutlined />}>
-                  Last 90 Days
-                </Menu.Item>
-                <Menu.Item key="120" icon={<SlidersOutlined />}>
-                  Last 120 Days
-                </Menu.Item>
-              </Menu>
-            }>
-              <div style={{ marginTop: 3 }}>
-                <Button>
-                  Filter Summary Stats <DownOutlined />
-                </Button>
-              </div>
-            </Dropdown>
-          </Row>
 
-          <div style={{ marginBottom: 20 }}>
-            <Row gutter={[16, 16]} style={{ margin: 10 }}>
+          <div style={{ marginTop: 20, marginBottom: 20 }}>
+            <Row justify="space-between" gutter={[16, 16]} style={{ margin: 30 }}>
               <Col xs={24} xl={8}>
-                <Card hoverable title="Number of Transactions" className="smooth-card" loading={statsLoading}>
-                  <h1 style={{ fontSize: '30px' }}>{stats.total}</h1>
-                  <p style={{ bottom: 0, margin: 0 }}>Total Number of Trades in Disclosure</p>
+                <Card hoverable title="Volume Total" className="smooth-card" loading={statsLoading}>
+                  <h1 style={{ fontSize: '30px' }}>{numeral(stats.volume).format('0.[00]a').toUpperCase()}</h1>
+                  <p style={{ bottom: 0, margin: 0 }}>Volume Total</p>
                 </Card>
               </Col>
               <Col xs={24} xl={8}>
-                <Card hoverable title="Total Trade Volume" className="smooth-card" loading={statsLoading}>
-                  <h1 style={{ fontSize: '30px' }}>${stats.volume}</h1>
-                  <p style={{ bottom: 0, margin: 0 }}>Combined Volume of Asset Sales + Purchases</p>
-                </Card>
-              </Col>
-              <Col xs={24} xl={8}>
-                <Card hoverable title="Trade Type Ratio" className="smooth-card" loading={statsLoading}>
-                  <h1 style={{ fontSize: '30px' }}><span color='green'>{stats.purchases}</span>/<span color='red'>{stats.sales}</span></h1>
-                  <p style={{ bottom: 0, margin: 0 }}>Purchases Trades / Sales Trades</p>
+                <Card hoverable title="Valor de Mercado Total" className="smooth-card" loading={statsLoading}>
+                  <h1 style={{ fontSize: '30px' }}>${ numeral(stats.total).format('0.[00]a').toUpperCase()}</h1>
+                  <p style={{ bottom: 0, margin: 0 }}>Valor de Mercado Total</p>
                 </Card>
               </Col>
             </Row>
           </div>
+          {
+          graphData ? 
+          <div style={{ marginBottom: 20 }}>
+            {/*<!-- make this row put components justify space between */}
+            
+            <Row justify="space-between" gutter={[16, 16]} style={{ margin: 20, padding: 10}}>
+              <Card hoverable title="META - Preço da Ação" className="smooth-card" loading={statsLoading}>
+                  <LineChart width={500} height={300} data={graphData}>
+                    <XAxis dataKey="x" />
+                    <YAxis tick={<CustomYAxisTick />} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="META" stroke="#8884d8" />
+                    <Tooltip />
+                    <Legend />
+                  </LineChart>
+              </Card>
+              <Card hoverable title="AMAZON - Preço da Ação" className="smooth-card" loading={statsLoading}>
+                  <LineChart width={500} height={300} data={graphData}>
+                    <XAxis dataKey="x" />
+                    <YAxis tick={<CustomYAxisTick />} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="AMZN" stroke="#8884d8" />
+                    <Tooltip />
+                    <Legend />
+                  </LineChart>
+              </Card>
+            </Row>
+            <Row justify="space-between" gutter={[16, 16]} style={{ margin: 20, padding: 10 }}>
+              <Card hoverable title="APPLE - Preço da Ação" className="smooth-card" loading={statsLoading}>
+                  <LineChart width={500} height={300} data={graphData}>
+                    <XAxis dataKey="x"/>
+                    <YAxis tick={<CustomYAxisTick />} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="AAPL" stroke="#8884d8" />
+                    <Tooltip />
+                    <Legend />
+                  </LineChart>
+              </Card>
+              <Card hoverable title="NETFLIX - Preço da Ação" className="smooth-card" loading={statsLoading}>
+                  <LineChart width={500} height={300} data={graphData}>
+                    <XAxis dataKey="x"/>
+                    <YAxis tick={<CustomYAxisTick />} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="NFLX" stroke="#8884d8" />
+                    <Tooltip />
+                    <Legend />
+                  </LineChart>
+              </Card>
+            </Row>
+            <Row justify="center" gutter={[16, 16]} style={{ margin: 20, padding: 10 }}>
+              <Card hoverable title="GOOGLE - Preço da Ação" className="smooth-card" loading={statsLoading}>
+                  <LineChart width={500} height={300} data={graphData}>
+                    <XAxis dataKey="x" />
+                    <YAxis tick={<CustomYAxisTick />} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <CartesianGrid stroke="#eee" strokeDasharray="5 5" />
+                    <Line type="monotone" dataKey="GOOGL" stroke="#8884d8" />
+                    <Tooltip />
+                    <Legend />
+                  </LineChart>
+              </Card>
+            </Row>
+          </div> : <p>Data is null or undefined</p>}
+          
 
           <Row
             style={{
@@ -232,28 +298,6 @@ class Home extends Component<{}> {
               alignItems: "center",
             }}
           >
-            <Dropdown overlay={
-              <Menu onClick={this.handleTransactionTypeFilter}>
-                <Menu.Item key="" icon={<DollarOutlined />}>
-                  All Transactions
-                </Menu.Item>
-                <Menu.Item key="Purchase" icon={<DollarOutlined />}>
-                  Purchases
-                </Menu.Item>
-                <Menu.Item key="Sale (Full)" icon={<DollarOutlined />}>
-                  Full Sales
-                </Menu.Item>
-                <Menu.Item key="Sale (Partial)" icon={<DollarOutlined />}>
-                  Partial Sales
-                </Menu.Item>
-              </Menu>
-            }>
-              <div style={{ marginRight: 20, marginLeft: 20 }} >
-                <Button>
-                  Filter Transaction Type <DownOutlined />
-                </Button>
-              </div>
-            </Dropdown>
           </Row>
 
           <Table
